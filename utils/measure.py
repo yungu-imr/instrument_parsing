@@ -18,6 +18,7 @@ class CrossEntropy2D(nn.Module):
     def __call__(self, outputs, targets):
         if len(targets.size()) == 4:
             targets = torch.argmax(targets, dim=1)
+        outputs = F.log_softmax(outputs, dim=1)
         loss = self.nll_loss(outputs, targets)
         return loss
 
