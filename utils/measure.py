@@ -146,7 +146,7 @@ def general_dice(y_true, y_pred, num_classes=2):
     '''
     result = []
     y_pred = y_pred.argmax(axis=1)
-    for instrument_id in range(0, num_classes):  # ignore background
+    for instrument_id in range(1, num_classes):  # ignore background
 
         if np.all(y_true != instrument_id):
             if np.all(y_pred != instrument_id):
@@ -169,7 +169,7 @@ def general_jaccard(y_true, y_pred, num_classes=2):
     '''
     result = []
     y_pred = y_pred.argmax(axis=1)
-    for instrument_id in range(0, num_classes):  # ignore background
+    for instrument_id in range(1, num_classes):  # ignore background
         if np.all(y_true != instrument_id):
             if np.all(y_pred != instrument_id):
                 result += [1]
