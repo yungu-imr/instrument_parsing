@@ -9,7 +9,7 @@ from tqdm import tqdm
 import cv2
 import numpy as np
 
-data_path = Path('/home/ygu/workspace_new/instrument')
+data_path = Path('/opt/dataset/instrument_segmentation/endovis2017/data')
 
 train_path = data_path / 'train'
 
