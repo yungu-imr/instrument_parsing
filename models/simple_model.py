@@ -103,4 +103,4 @@ class SimpleModel(BaseModel):
                             ])
 
     def save(self, label):
-        self.save_network(self.net, 'onestage_parse_net_%s'% self.opt.model, label, self.gpu_ids)
+        self.save_network(self.net, 'onestage_parse_net_{}_fold{}'.format(self.opt.model, self.opt.fold), label, self.gpu_ids)

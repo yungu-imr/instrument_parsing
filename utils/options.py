@@ -12,8 +12,8 @@ class Options:
         self.parser.add_argument('--jaccard-weight', default=0.5, type=float)
         self.parser.add_argument('--gpu_ids', type=str, default='0', help='For example 0,1 to run on two GPUs')
         self.parser.add_argument('--fold', type=int, help='fold', default=0)
-        self.parser.add_argument('--batch_size', type=int, default=2)
-        self.parser.add_argument('--niter', type=int, default=100)
+        self.parser.add_argument('--batch_size', type=int, default=3)
+        self.parser.add_argument('--niter', type=int, default=50)
         self.parser.add_argument('--lr', type=float, default=0.0001)
         self.parser.add_argument('--workers', type=int, default=12)
         self.parser.add_argument('--train_crop_height', type=int, default=1024)
@@ -26,8 +26,10 @@ class Options:
         self.parser.add_argument('--isTrain', type=bool, default=True)
         self.parser.add_argument('--continue_train', type=bool, default=False)
         self.parser.add_argument('--checkpoints_dir', type=str, default='./checkpoints')
-        self.parser.add_argument('--evaluate_freq', type=int, default=5)
-        self.parser.add_argument('--save_epoch_freq', type=int, default=5)
+        self.parser.add_argument('--evaluate_freq', type=int, default=3)
+        self.parser.add_argument('--save_epoch_freq', type=int, default=10)
+        self.parser.add_argument('--save_model_dir', type=str, default='./model_checkpoints')
+        self.parser.add_argument('--save_worse_dir', type=str, default='./model_worse')
         self.opt = None
         self.parse()
 
@@ -50,9 +52,13 @@ class Options:
         print('-------------- End ----------------')
 
         # save to the disk
-        self.opt.name = self.opt.model + '_' + self.opt.problem_type + '_' + datetime.now().strftime("%Y%m%d_%H%M%S")
+        self.opt.name = self.opt.model + '_' + self.opt.problem_type + '_' + 'fold' + str(self.opt.fold) + '_' + datetime.now().strftime("%Y%m%d_%H%M%S")
         expr_dir = os.path.join(self.opt.checkpoints_dir, self.opt.name)
         simple_util.mkdirs(expr_dir)
+        model_dir = os.path.join(self.opt.save_model_dir, self.opt.name)
+        simple_util.mkdirs(model_dir)
+        bad_image_dir = os.path.join(self.opt.save_worse_dir, self.opt.name)
+        simple_util.mkdirs(bad_image_dir)
         file_name = os.path.join(expr_dir, 'opt.txt')
         with open(file_name, 'wt') as opt_file:
             opt_file.write('------------ Options -------------\n')

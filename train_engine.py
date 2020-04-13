@@ -51,9 +51,28 @@ class TrainEngine:
         self.model.set_train()
         return epoch_acc
 
+    # This function is used for saving the image picture
+    def worse_case(self, dataloader, initial_IoU):
+        epoch_acc = {'DICE': tnt.meter.AverageValueMeter(),
+                     'IoU': tnt.meter.AverageValueMeter()}
+
+        self.model.set_eval()
+        with torch.no_grad():
+            t = tqdm(dataloader)
+            for batch_itr, data in enumerate(t):
+                self.model.set_input(data)
+                self.model.forward()
+                acc, loss = self.model.get_val()
+                if acc['IoU'] < initial_IoU:
+                    self.visualizer.save__worse_images(self.model.get_current_visuals(), acc['IoU'])
+        self.model.set_train()
+        return epoch_acc
+
+
     def train_model(self):
 
         training_time = 0.0
+        final_avg_IOU = 0
         for cur_iter in range(0, self.opt.niter):
             running_loss = 0.0
             tic = time.time()
@@ -76,6 +95,7 @@ class TrainEngine:
 
             if cur_iter % self.opt.evaluate_freq == 0:
                 acc_metric = self.evaluate(self.val_dataloader, epoch=cur_iter)
+                final_avg_IOU = acc_metric['DICE'].mean
                 for key in acc_metric.keys():
                     self.visualizer.plot_errors({'test': acc_metric[key].mean}, main_fig_title=key)
 
@@ -83,3 +103,7 @@ class TrainEngine:
                 print('saving the model at the end of epoch %d' % cur_iter)
                 self.model.save('latest')
                 self.model.save(cur_iter)
+
+            # if cur_iter == self.opt.niter - 1:
+            #     print('find the worst picture')
+            #     number = self.worse_case()

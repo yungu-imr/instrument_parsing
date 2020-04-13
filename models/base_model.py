@@ -21,7 +21,7 @@ class BaseModel(object):
         self.DataTensor = torch.cuda.FloatTensor if self.gpu_ids else torch.FloatTensor
         self.LabelTensor = torch.cuda.LongTensor if self.gpu_ids else torch.LongTensor
 
-        self.save_dir = os.path.join(opt.checkpoints_dir, opt.name)
+        self.save_dir = os.path.join(opt.save_model_dir, opt.name)
 
     def set_input(self, data):
         input,output = data
