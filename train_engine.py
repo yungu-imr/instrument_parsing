@@ -47,7 +47,7 @@ class TrainEngine:
                 t.set_description('[Testing]')
                 t.set_postfix(DICE=epoch_acc['DICE'].mean, IoU=epoch_acc['IoU'].mean)
         self.visualizer.add_log('[Testing]：DICE:%f, IoU:%f' % (epoch_acc['DICE'].mean, epoch_acc['IoU'].mean))
-        self.visualizer.save_images(self.model.get_current_visuals(), epoch)
+        self.visualizer.save_images(self.model.get_current_visuals(), epoch, epoch_acc['IoU'].mean)
         self.model.set_train()
         return epoch_acc
 
@@ -56,6 +56,7 @@ class TrainEngine:
         epoch_acc = {'DICE': tnt.meter.AverageValueMeter(),
                      'IoU': tnt.meter.AverageValueMeter()}
 
+        ep = 10e-15
         self.model.set_eval()
         with torch.no_grad():
             t = tqdm(dataloader)
@@ -64,7 +65,8 @@ class TrainEngine:
                 self.model.forward()
                 acc, loss = self.model.get_val()
                 if acc['IoU'] < initial_IoU:
-                    self.visualizer.save__worse_images(self.model.get_current_visuals(), acc['IoU'])
+                    initial_IoU = acc['IoU'] + ep*np.random.normal()
+                    self.visualizer.save__worse_images(self.model.get_current_visuals(), initial_IoU)
         self.model.set_train()
         return epoch_acc
 
@@ -72,7 +74,7 @@ class TrainEngine:
     def train_model(self):
 
         training_time = 0.0
-        final_avg_IOU = 0
+        final_avg_IoU = 0
         for cur_iter in range(0, self.opt.niter):
             running_loss = 0.0
             tic = time.time()
@@ -86,6 +88,7 @@ class TrainEngine:
                 batch_accum += data[0].size(0)
                 t.set_description('[Training Epoch %d/%d]' % (cur_iter, self.opt.niter))
                 t.set_postfix(loss=running_loss/batch_accum)
+
             self.model.scheduler.step()
             self.visualizer.plot_errors({'train': running_loss / len(self.train_dataloader.dataset)},
                                         main_fig_title='err')
@@ -95,7 +98,8 @@ class TrainEngine:
 
             if cur_iter % self.opt.evaluate_freq == 0:
                 acc_metric = self.evaluate(self.val_dataloader, epoch=cur_iter)
-                final_avg_IOU = acc_metric['DICE'].mean
+                final_avg_IoU = acc_metric['DICE'].mean
+                print(final_avg_IoU)
                 for key in acc_metric.keys():
                     self.visualizer.plot_errors({'test': acc_metric[key].mean}, main_fig_title=key)
 
@@ -104,6 +108,6 @@ class TrainEngine:
                 self.model.save('latest')
                 self.model.save(cur_iter)
 
-            # if cur_iter == self.opt.niter - 1:
-            #     print('find the worst picture')
-            #     number = self.worse_case()
+            if cur_iter == self.opt.niter - 1:
+                print('find the worst picture')
+                number = self.worse_case(self.val_dataloader, final_avg_IoU)

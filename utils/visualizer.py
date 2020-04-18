@@ -93,9 +93,9 @@ class Visualizer:
         for item in images.keys():
             self.writer.add_image(item, images[item], time_step)
 
-    def save_images(self, images, epoch):
+    def save_images(self, images, epoch, acc):
         for item in images.keys():
-            cur_image_fullpath = os.path.join(self.save_image_root, 'Epoch_%06d_%s.png' % (epoch, item))
+            cur_image_fullpath = os.path.join(self.save_image_root, 'Epoch_%06d_%s_%s.png' % (epoch, item, acc))
 
             simple_util.save_image(images[item], cur_image_fullpath)
 

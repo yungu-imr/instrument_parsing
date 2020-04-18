@@ -36,9 +36,9 @@ class _DiceLoss(nn.Module):
         intersection = pred_flat * target_flat
 
         loss = 2 * (intersection.sum(1) + self.smooth) / (pred_flat.sum(1) + target_flat.sum(1) + self.smooth)
-        loss = 1 - loss.sum() / batch_size
+        loss1 = 1 - loss.sum() / batch_size
 
-        return loss
+        return loss1
 
 
 class DiceLoss(nn.Module):
