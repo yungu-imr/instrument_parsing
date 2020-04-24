@@ -9,7 +9,7 @@ from tqdm import tqdm
 import cv2
 import numpy as np
 
-data_path = Path('/home/ygu/workspace_new/instrument')
+data_path = Path('/home/ygu/workspace_new/instrument_segmentation_new')
 
 train_path = data_path / 'train'
 
@@ -31,6 +31,7 @@ class_num = {
 class_color=[[0,0,0], [0,255,0], [0,255,255], [125,255,12],
             [255,55,0], [24,55,125], [187,155,25], [0,255,125], [255,255,125],
             [123,15,175], [124,155,5], [12,255,141]]
+
 
 def get_split(fold=0):
     folds = {0: [1, 3],

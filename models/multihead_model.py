@@ -1,6 +1,6 @@
 from collections import OrderedDict
 from .base_model import BaseModel
-from utils.measure import DiceLoss, CEDiceLoss, general_dice, general_jaccard, ICNetLoss,BoundaryLoss
+from utils.measure import DiceLoss, CEDiceLoss, general_dice, general_jaccard, ICNetLoss, BoundaryLoss
 from models import get_model
 from data.utils.prepare_data import class_num
 import torch
@@ -21,7 +21,7 @@ class SimpleModel(BaseModel):
         self.num_classes = class_num[opt.problem_type]
 
         # model
-        self.net = get_model(opt.model)(in_channels=3, classes=class_num[opt.problem_type])
+        self.net = get_model(opt.model)(in_channels=3, classes_mask=class_num[opt.problem_type], classes_contour=7)
         if len(opt.gpu_ids) > 0:
             assert (torch.cuda.is_available())
             self.net = nn.DataParallel(self.net).cuda()
@@ -41,8 +41,9 @@ class SimpleModel(BaseModel):
             elif self.opt.problem_type == 'binary':
                 self.criterion = DiceLoss(num_classes=class_num[opt.problem_type])
             elif self.opt.problem_type == 'parts':
-                self.criterion = CEDiceLoss(num_classes=class_num[opt.problem_type])
-                self.criterion_b = BoundaryLoss()
+                self.criterion_parts = CEDiceLoss(num_classes=class_num[opt.problem_type])
+                self.criterion_contour = CEDiceLoss(num_classes=7)
+                self.criterion_corr = BoundaryLoss()
 
             self.optimizer = torch.optim.Adam(self.net.parameters(), lr=opt.lr, betas=(0.5, 0.999))
             # self.scheduler = torch.optim.lr_scheduler.StepLR(self.optimizer, self.opt.decay_step)
@@ -63,15 +64,19 @@ class SimpleModel(BaseModel):
         pass
 
     def set_input(self, data):
-        input_im, input_mask = data
+        input_im, input_mask, input_contour = data
         self.input_im = input_im.to(self.opt.device)
         self.real_mask = input_mask.to(self.opt.device)
+        self.real_contour = input_contour.to(self.opt.device)
+
 
     def forward(self):
-        self.est_mask = self.net.forward(self.input_im)
+        self.est_mask, self.est_contour = self.net.forward(self.input_im)
 
     def calc_loss(self):
-        self.loss = self.criterion(self.est_mask, self.real_mask) + self.criterion(self.est_mask, self.real_mask)
+        self.loss = self.criterion_parts(self.est_mask, self.real_mask) + \
+                    self.criterion_contour(self.est_contour, self.real_contour) + self.criterion_corr(self.est_contour,
+                                                                                                      self.est_mask)
 
     def get_loss(self):
         return self.loss
@@ -112,6 +117,10 @@ class SimpleModel(BaseModel):
                                                                               num_classes=self.num_classes)),
                             ('seg_real_%s'%self.state, simple_util.tensor2mask(self.real_mask.data,
                                                                                num_classes=self.num_classes)),
+                                ('seg_contour_est_%s' % self.state, simple_util.tensor2mask(self.est_contour.data,
+                                                                                    num_classes=7)),
+                                ('seg_contour_real_%s' % self.state, simple_util.tensor2mask(self.real_contour.data,
+                                                                                     num_classes=7)),
                             ])
 
     def save(self, label):

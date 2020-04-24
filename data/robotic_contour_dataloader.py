@@ -15,6 +15,7 @@ from albumentations import (
     CenterCrop
 )
 
+
 class RoboticsDataset(Dataset):
     def __init__(self, file_names, transform=None, problem_type='binary'):
         self.file_names = file_names
@@ -28,17 +29,18 @@ class RoboticsDataset(Dataset):
         img_file_name = self.file_names[idx]
         image = load_image(img_file_name)
         mask = load_mask(img_file_name, self.problem_type)
+        contour = load_contour(img_file_name)
 
-        data = {"image": image, "mask": mask}
+        data = {"image": image, "mask": mask, 'contour': contour}
 
         if self.transform is not None:
             augmented = self.transform(**data)
-            image, mask = augmented["image"], augmented["mask"]
+            image, mask,contour = augmented["image"], augmented["mask"], augmented['contour']
 
         if self.problem_type == 'binary':
-            return img_to_tensor(image), torch.from_numpy(mask).long()
+            return img_to_tensor(image), torch.from_numpy(mask).long(), torch.from_numpy(contour).long()
         else:
-            return img_to_tensor(image), torch.from_numpy(mask).long()
+            return img_to_tensor(image), torch.from_numpy(mask).long(), torch.from_numpy(contour).long()
 
 
 def load_image(path):

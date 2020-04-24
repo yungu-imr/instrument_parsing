@@ -4,7 +4,7 @@ import torch
 import torchnet as tnt
 import random
 import numpy as np
-import models.simple_model as simple_model
+import models.multihead_model as multihead_model
 import time
 from tqdm import tqdm
 from utils.visualizer import Visualizer
@@ -16,7 +16,7 @@ class TrainEngine:
     def __init__(self, opt):
         self.opt = opt
         self.cudnn_init()
-        self.model = simple_model.SimpleModel(opt)
+        self.model = multihead_model.SimpleModel(opt)
         self.train_dataloader = None
         self.val_dataloader = None
         self.visualizer = Visualizer(opt, False)
