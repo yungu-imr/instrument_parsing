@@ -1,4 +1,8 @@
-from .model import SegmentationModel
+from .model import (
+    SegmentationModel,
+    SegmentationModelMultiHead,
+    SegmentationModelMultiHeadPool,
+)
 
 from .modules import (
     Conv2dReLU,
@@ -8,4 +12,8 @@ from .modules import (
 from .heads import (
     SegmentationHead,
     ClassificationHead,
+)
+
+from .PoolContour import (
+    PoolContourHead,
 )

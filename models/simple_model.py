@@ -1,6 +1,6 @@
 from collections import OrderedDict
 from .base_model import BaseModel
-from utils.measure import DiceLoss, CEDiceLoss, general_dice, general_jaccard
+from utils.measure import DiceLoss, CEDiceLoss, general_dice, general_jaccard, ICNetLoss,BoundaryLoss
 from models import get_model
 from data.utils.prepare_data import class_num
 import torch
@@ -36,13 +36,17 @@ class SimpleModel(BaseModel):
         if self.isTrain:
             self.old_lr = opt.lr
             # self.criterion = nn.MSELoss()
-            if self.opt.problem_type == 'binary':
+            if self.opt.model == 'ICNet':
+                self.criterion = ICNetLoss()
+            elif self.opt.problem_type == 'binary':
                 self.criterion = DiceLoss(num_classes=class_num[opt.problem_type])
             elif self.opt.problem_type == 'parts':
                 self.criterion = CEDiceLoss(num_classes=class_num[opt.problem_type])
+                self.criterion_b = BoundaryLoss()
 
             self.optimizer = torch.optim.Adam(self.net.parameters(), lr=opt.lr, betas=(0.5, 0.999))
-            self.scheduler = torch.optim.lr_scheduler.StepLR(self.optimizer, int(self.opt.niter / 20.0))
+            # self.scheduler = torch.optim.lr_scheduler.StepLR(self.optimizer, self.opt.decay_step)
+            self.scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(self.optimizer, self.opt.decay_step * 2, self.opt.lr * 0.01)
 
     def name(self):
         return 'SimpleModel'
@@ -67,7 +71,7 @@ class SimpleModel(BaseModel):
         self.est_mask = self.net.forward(self.input_im)
 
     def calc_loss(self):
-        self.loss = self.criterion(self.est_mask, self.real_mask)
+        self.loss = self.criterion(self.est_mask, self.real_mask) + self.criterion(self.est_mask, self.real_mask)
 
     def get_loss(self):
         return self.loss
@@ -94,8 +98,16 @@ class SimpleModel(BaseModel):
         self.optimizer.step()
 
     def get_current_visuals(self):
+        if self.opt.model == 'ICNet':
+            return OrderedDict([('img_%s' % self.state, simple_util.tensor2image(self.input_im.data)),
+                                ('seg_est_%s' % self.state, simple_util.tensor2mask(self.est_mask[0].data,
+                                                                                    num_classes=self.num_classes)),
+                                ('seg_real_%s' % self.state, simple_util.tensor2mask(self.real_mask.data,
+                                                                                     num_classes=self.num_classes)),
+                                ])
 
-        return OrderedDict([('img_%s'%self.state, simple_util.tensor2image(self.input_im.data)),
+        else:
+            return OrderedDict([('img_%s'%self.state, simple_util.tensor2image(self.input_im.data)),
                             ('seg_est_%s'%self.state, simple_util.tensor2mask(self.est_mask.data,
                                                                               num_classes=self.num_classes)),
                             ('seg_real_%s'%self.state, simple_util.tensor2mask(self.real_mask.data,
@@ -103,4 +115,4 @@ class SimpleModel(BaseModel):
                             ])
 
     def save(self, label):
-        self.save_network(self.net, 'onestage_parse_net_{}_fold{}'.format(self.opt.model, self.opt.fold), label, self.gpu_ids)
+        self.save_network(self.net, 'onestage_parse_net_%s'% self.opt.model, label, self.gpu_ids)

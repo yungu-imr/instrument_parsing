@@ -8,6 +8,8 @@ import models.simple_model as simple_model
 import time
 from tqdm import tqdm
 from utils.visualizer import Visualizer
+from utils.measure import calculate_confusion_matrix_from_arrays, calculate_dice, calculate_iou, general_jaccard, general_dice
+from data.utils.prepare_data import class_num
 
 
 class TrainEngine:
@@ -38,43 +40,35 @@ class TrainEngine:
         self.model.set_eval()
         with torch.no_grad():
             t = tqdm(dataloader)
+            dice = []
+            iou = []
             for batch_itr, data in enumerate(t):
                 self.model.set_input(data)
                 self.model.forward()
-                acc, loss = self.model.get_val()
-                for key in epoch_acc.keys():
-                    epoch_acc[key].add(acc[key])
+                # acc, loss = self.model.get_val()
+                # for key in epoch_acc.keys():
+                #     epoch_acc[key].add(acc[key])
+                if self.opt.model == 'ICNet':
+                    output_classes = self.model.est_mask[0].data.cpu().numpy().argmax(axis=1)
+                else:
+                    output_classes = self.model.est_mask.data.cpu().numpy().argmax(axis=1)
+                target_classes = self.model.real_mask.data.cpu().numpy()
+                dice += [general_dice(target_classes, output_classes)]
+                iou += [general_jaccard(target_classes, output_classes)]
                 t.set_description('[Testing]')
-                t.set_postfix(DICE=epoch_acc['DICE'].mean, IoU=epoch_acc['IoU'].mean)
-        self.visualizer.add_log('[Testing]：DICE:%f, IoU:%f' % (epoch_acc['DICE'].mean, epoch_acc['IoU'].mean))
-        self.visualizer.save_images(self.model.get_current_visuals(), epoch, epoch_acc['IoU'].mean)
+                average_dices = np.mean(dice)
+                average_iou = np.mean(iou)
+                t.set_postfix(DICE=average_dices, IoU=average_iou)
+        self.visualizer.add_log('[Testing]：DICE:%f, IoU:%f' % (average_dices, average_iou))
+                # t.set_postfix(DICE=epoch_acc['DICE'].mean, IoU=epoch_acc['IoU'].mean)
+        # self.visualizer.add_log('[Testing]：DICE:%f, IoU:%f' % (epoch_acc['DICE'].mean, epoch_acc['IoU'].mean))
+        self.visualizer.save_images(self.model.get_current_visuals(), epoch)
         self.model.set_train()
         return epoch_acc
-
-    # This function is used for saving the image picture
-    def worse_case(self, dataloader, initial_IoU):
-        epoch_acc = {'DICE': tnt.meter.AverageValueMeter(),
-                     'IoU': tnt.meter.AverageValueMeter()}
-
-        ep = 10e-15
-        self.model.set_eval()
-        with torch.no_grad():
-            t = tqdm(dataloader)
-            for batch_itr, data in enumerate(t):
-                self.model.set_input(data)
-                self.model.forward()
-                acc, loss = self.model.get_val()
-                if acc['IoU'] < initial_IoU:
-                    initial_IoU = acc['IoU'] + ep*np.random.normal()
-                    self.visualizer.save__worse_images(self.model.get_current_visuals(), initial_IoU)
-        self.model.set_train()
-        return epoch_acc
-
 
     def train_model(self):
 
         training_time = 0.0
-        final_avg_IoU = 0
         for cur_iter in range(0, self.opt.niter):
             running_loss = 0.0
             tic = time.time()
@@ -88,7 +82,6 @@ class TrainEngine:
                 batch_accum += data[0].size(0)
                 t.set_description('[Training Epoch %d/%d]' % (cur_iter, self.opt.niter))
                 t.set_postfix(loss=running_loss/batch_accum)
-
             self.model.scheduler.step()
             self.visualizer.plot_errors({'train': running_loss / len(self.train_dataloader.dataset)},
                                         main_fig_title='err')
@@ -98,8 +91,6 @@ class TrainEngine:
 
             if cur_iter % self.opt.evaluate_freq == 0:
                 acc_metric = self.evaluate(self.val_dataloader, epoch=cur_iter)
-                final_avg_IoU = acc_metric['DICE'].mean
-                print(final_avg_IoU)
                 for key in acc_metric.keys():
                     self.visualizer.plot_errors({'test': acc_metric[key].mean}, main_fig_title=key)
 
@@ -107,7 +98,3 @@ class TrainEngine:
                 print('saving the model at the end of epoch %d' % cur_iter)
                 self.model.save('latest')
                 self.model.save(cur_iter)
-
-            if cur_iter == self.opt.niter - 1:
-                print('find the worst picture')
-                number = self.worse_case(self.val_dataloader, final_avg_IoU)

@@ -2,7 +2,7 @@ from data.robotic_dataloader import get_train_dataloader, get_val_dataloader
 from utils.options import Options
 from data.utils.prepare_data import get_split
 
-from train_engine import TrainEngine
+from train_engine_contour import TrainEngine
 
 if __name__ == '__main__':
     opt = Options().opt

@@ -46,6 +46,11 @@ def load_image(path):
     return cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
 
 
+def load_contour(path):
+    contour = cv2.imread(str(path).replace('images', 'parts_contours2').replace('jpg', 'png'), 0)
+    return contour
+
+
 def load_mask(path, problem_type):
     if problem_type == 'binary':
         mask_folder = 'binary_masks'
@@ -58,6 +63,7 @@ def load_mask(path, problem_type):
         mask_folder = 'instruments_masks'
 
     mask = cv2.imread(str(path).replace('images', mask_folder).replace('jpg', 'png'), 0)
+
 
     return (mask / factor).astype(np.uint8)
 

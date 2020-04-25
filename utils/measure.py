@@ -10,6 +10,46 @@ def convert2onehot(tensor, num_classes):
     return one_hot
 
 
+class BoundaryLoss(nn.Module):
+    def __init__(self, boundry_kernel_size=3):
+        super().__init__()
+        self.boundary_kernel_size = boundry_kernel_size
+
+    def forward(self, outputs_countour, outputs_mask, contour_encoding=None):
+        """
+
+        :param outputs_countour:
+        :param outputs_mask:
+        :return:
+        """
+        n, c, _, _ = outputs_mask.shape
+
+        if contour_encoding is None:
+            contour_encoding = []
+            for i in range(0, c-2):
+                for j in range(1, c-1):
+                    contour_encoding.append([i,j])
+
+        # softmax so that predicted map can be distributed in [0, 1]
+        outputs_mask = F.softmax(outputs_mask, dim=1)
+        boundary_est = F.max_pool2d(
+            -outputs_mask + 1.0, kernel_size=self.boundary_kernel_size, stride=1, padding=(self.boundary_kernel_size - 1) // 2)
+        boundary_est -= 1 - outputs_mask
+        boundary_est = boundary_est.view(n, c, -1)
+
+        outputs_countour = torch.softmax(outputs_countour, dim=1)
+        n, c, _, _ = outputs_countour.shape
+        outputs_countour = outputs_countour.view(n, c, -1)
+
+        # Precision, Recall
+        loss = 0
+
+        for idx, class_pair in enumerate(contour_encoding):
+            loss += F.kl_div(outputs_countour[:,idx+1,:],
+                             boundary_est[:,class_pair[0],:]*boundary_est[:,class_pair[1],:])
+        return loss
+
+
 class CrossEntropy2D(nn.Module):
     def __init__(self):
         super().__init__()
@@ -18,6 +58,7 @@ class CrossEntropy2D(nn.Module):
     def __call__(self, outputs, targets):
         if len(targets.size()) == 4:
             targets = torch.argmax(targets, dim=1)
+        outputs = F.log_softmax(outputs, dim=1)
         loss = self.nll_loss(outputs, targets)
         return loss
 
@@ -36,9 +77,9 @@ class _DiceLoss(nn.Module):
         intersection = pred_flat * target_flat
 
         loss = 2 * (intersection.sum(1) + self.smooth) / (pred_flat.sum(1) + target_flat.sum(1) + self.smooth)
-        loss1 = 1 - loss.sum() / batch_size
+        loss = 1 - loss.sum() / batch_size
 
-        return loss1
+        return loss
 
 
 class DiceLoss(nn.Module):
@@ -145,7 +186,8 @@ def general_dice(y_true, y_pred, num_classes=2):
     :return:
     '''
     result = []
-    y_pred = y_pred.argmax(axis=1)
+    if len(y_pred.shape) == 4:
+        y_pred = y_pred.argmax(axis=1)
     for instrument_id in range(1, num_classes):  # ignore background
 
         if np.all(y_true != instrument_id):
@@ -168,7 +210,8 @@ def general_jaccard(y_true, y_pred, num_classes=2):
     :return:
     '''
     result = []
-    y_pred = y_pred.argmax(axis=1)
+    if len(y_pred.shape) == 4:
+        y_pred = y_pred.argmax(axis=1)
     for instrument_id in range(1, num_classes):  # ignore background
         if np.all(y_true != instrument_id):
             if np.all(y_pred != instrument_id):
@@ -189,3 +232,72 @@ def jaccard(y_true, y_pred):
 
 def dice(y_true, y_pred):
     return (2 * (y_true * y_pred).sum() + 1e-15) / (y_true.sum() + y_pred.sum() + 1e-15)
+
+
+def calculate_confusion_matrix_from_arrays(prediction, ground_truth, nr_labels):
+    replace_indices = np.vstack((
+        ground_truth.flatten(),
+        prediction.flatten())
+    ).T
+    confusion_matrix, _ = np.histogramdd(
+        replace_indices,
+        bins=(nr_labels, nr_labels),
+        range=[(0, nr_labels), (0, nr_labels)]
+    )
+    confusion_matrix = confusion_matrix.astype(np.uint32)
+    return confusion_matrix
+
+
+def calculate_iou(confusion_matrix):
+    ious = []
+    for index in range(confusion_matrix.shape[0]):
+        true_positives = confusion_matrix[index, index]
+        false_positives = confusion_matrix[:, index].sum() - true_positives
+        false_negatives = confusion_matrix[index, :].sum() - true_positives
+        denom = true_positives + false_positives + false_negatives
+        if denom == 0:
+            iou = 0
+        else:
+            iou = float(true_positives) / denom
+        ious.append(iou)
+    return ious
+
+
+def calculate_dice(confusion_matrix):
+    dices = []
+    for index in range(confusion_matrix.shape[0]):
+        true_positives = confusion_matrix[index, index]
+        false_positives = confusion_matrix[:, index].sum() - true_positives
+        false_negatives = confusion_matrix[index, :].sum() - true_positives
+        denom = 2 * true_positives + false_positives + false_negatives
+        if denom == 0:
+            dice = 0
+        else:
+            dice = 2 * float(true_positives) / denom
+        dices.append(dice)
+    return dices
+
+
+class ICNetLoss(nn.CrossEntropyLoss):
+    """Cross Entropy Loss for ICNet"""
+
+    def __init__(self, aux_weight=0.4, ignore_index=0):
+        super(ICNetLoss, self).__init__(ignore_index=ignore_index)
+        self.aux_weight = aux_weight
+
+    def forward(self, *inputs):
+        preds, target = tuple(inputs)
+        inputs = tuple(list(preds) + [target])
+
+        pred, pred_sub4, pred_sub8, pred_sub16, target = tuple(inputs)
+        # [batch, H, W] -> [batch, 1, H, W]
+        target = target.unsqueeze(1).float()
+        target_sub4 = F.interpolate(target, pred_sub4.size()[2:], mode='bilinear', align_corners=True).squeeze(1).long()
+        target_sub8 = F.interpolate(target, pred_sub8.size()[2:], mode='bilinear', align_corners=True).squeeze(1).long()
+        target_sub16 = F.interpolate(target, pred_sub16.size()[2:], mode='bilinear', align_corners=True).squeeze(
+            1).long()
+        loss1 = super(ICNetLoss, self).forward(pred_sub4, target_sub4)
+        loss2 = super(ICNetLoss, self).forward(pred_sub8, target_sub8)
+        loss3 = super(ICNetLoss, self).forward(pred_sub16, target_sub16)
+        # return dict(loss=loss1 + loss2 * self.aux_weight + loss3 * self.aux_weight)
+        return loss1 + loss2 * self.aux_weight + loss3 * self.aux_weight

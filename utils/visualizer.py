@@ -41,7 +41,6 @@ class Visualizer:
         self.log = open(log_filename, 'w')
         self.write_opt(opt)
         self.save_image_root = os.path.join(opt.checkpoints_dir, opt.name)
-        self.save_worse_root = os.path.join(opt.save_worse_dir, opt.name)
 
     def add_text(self, tag, text):
         self.writer.add_text(tag, text)
@@ -93,17 +92,11 @@ class Visualizer:
         for item in images.keys():
             self.writer.add_image(item, images[item], time_step)
 
-    def save_images(self, images, epoch, acc):
+    def save_images(self, images, epoch):
         for item in images.keys():
-            cur_image_fullpath = os.path.join(self.save_image_root, 'Epoch_%06d_%s_%s.png' % (epoch, item, acc))
-
+            cur_image_fullpath = os.path.join(self.save_image_root,'Epoch_%06d_%s.png' % (epoch, item))
             simple_util.save_image(images[item], cur_image_fullpath)
 
-    def save__worse_images(self, images, score):
-        for item in images.keys():
-            cur_image_fullpath = os.path.join(self.save_worse_root, 'Epoch_%06d_%s.png' % (score, item))
-
-            simple_util.save_image(images[item], cur_image_fullpath)
 
     def print_errors(self, epoch, batch, batch_all, errors):
         message = '(epoch: %d, (%d/%d)) ' % (epoch, batch, batch_all)
